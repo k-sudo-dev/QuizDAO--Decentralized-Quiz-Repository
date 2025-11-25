@@ -184,3 +184,53 @@
         (ok true)
     )
 )
+
+;; Contribute to reward pool
+;; #[allow(unchecked_data)]
+(define-public (contribute-to-pool (amount uint))
+    (begin
+        (var-set reward-pool (+ (var-get reward-pool) amount))
+        (ok true)
+    )
+)
+
+;; Distribute reward to participant
+;; #[allow(unchecked_data)]
+(define-public (distribute-reward (attempt-id uint))
+    (let
+        (
+            (attempt (unwrap! (map-get? quiz-attempts attempt-id) err-not-found))
+            (quiz (unwrap! (map-get? quizzes (get quiz-id attempt)) err-not-found))
+            (percentage (if (> (get max-score attempt) u0) 
+                (/ (* (get score attempt) u100) (get max-score attempt)) 
+                u0))
+            (reward-amount (get reward-amount quiz))
+            (participant-data (default-to 
+                { quizzes-attempted: u0, quizzes-passed: u0, total-score: u0, total-rewards-earned: u0 }
+                (map-get? participant-stats (get participant attempt))))
+        )
+        (asserts! (not (get rewarded attempt)) err-already-rewarded)
+        (asserts! (>= percentage (var-get minimum-passing-score)) err-minimum-score-not-met)
+        (asserts! (>= (var-get reward-pool) reward-amount) err-insufficient-balance)
+        
+        (var-set reward-pool (- (var-get reward-pool) reward-amount))
+        (map-set quiz-attempts attempt-id (merge attempt { rewarded: true }))
+        (map-set participant-stats (get participant attempt)
+            (merge participant-data { 
+                total-rewards-earned: (+ (get total-rewards-earned participant-data) reward-amount) 
+            }))
+        
+        (ok reward-amount)
+    )
+)
+
+;; Withdraw from reward pool (contract owner only)
+;; #[allow(unchecked_data)]
+(define-public (withdraw-from-pool (amount uint))
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-unauthorized)
+        (asserts! (>= (var-get reward-pool) amount) err-insufficient-balance)
+        (var-set reward-pool (- (var-get reward-pool) amount))
+        (ok amount)
+    )
+)
