@@ -234,3 +234,72 @@
         (ok amount)
     )
 )
+
+;; Toggle quiz active status
+;; #[allow(unchecked_data)]
+(define-public (toggle-quiz-status (quiz-id uint))
+    (let
+        (
+            (quiz (unwrap! (map-get? quizzes quiz-id) err-not-found))
+        )
+        (asserts! (is-eq tx-sender (get creator quiz)) err-unauthorized)
+        (ok (map-set quizzes quiz-id (merge quiz { active: (not (get active quiz)) })))
+    )
+)
+
+;; Update quiz details
+;; #[allow(unchecked_data)]
+(define-public (update-quiz-details 
+    (quiz-id uint)
+    (title (string-ascii 100))
+    (category (string-ascii 50))
+    (reward-amount uint))
+    (let
+        (
+            (quiz (unwrap! (map-get? quizzes quiz-id) err-not-found))
+        )
+        (asserts! (is-eq tx-sender (get creator quiz)) err-unauthorized)
+        (ok (map-set quizzes quiz-id 
+            (merge quiz { 
+                title: title, 
+                category: category, 
+                reward-amount: reward-amount 
+            })))
+    )
+)
+
+;; Set platform fee percentage
+;; #[allow(unchecked_data)]
+(define-public (set-platform-fee (new-fee uint))
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-unauthorized)
+        (asserts! (<= new-fee u20) err-invalid-score)
+        (var-set platform-fee-percentage new-fee)
+        (ok true)
+    )
+)
+
+;; Set minimum passing score
+;; #[allow(unchecked_data)]
+(define-public (set-minimum-passing-score (new-score uint))
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-unauthorized)
+        (asserts! (<= new-score u100) err-invalid-score)
+        (var-set minimum-passing-score new-score)
+        (ok true)
+    )
+)
+
+;; Update leaderboard entry
+;; #[allow(unchecked_data)]
+(define-public (update-leaderboard (quiz-id uint) (rank uint) (participant principal) (score uint) (percentage uint))
+    (let
+        (
+            (quiz (unwrap! (map-get? quizzes quiz-id) err-not-found))
+        )
+        (asserts! (is-eq tx-sender (get creator quiz)) err-unauthorized)
+        (ok (map-set quiz-leaderboard 
+            { quiz-id: quiz-id, rank: rank }
+            { participant: participant, score: score, percentage: percentage }))
+    )
+)
