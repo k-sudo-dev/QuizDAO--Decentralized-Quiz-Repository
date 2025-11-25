@@ -303,3 +303,221 @@
             { participant: participant, score: score, percentage: percentage }))
     )
 )
+
+;; Read-only Functions
+
+;; Get quiz details
+(define-read-only (get-quiz (quiz-id uint))
+    (map-get? quizzes quiz-id)
+)
+
+;; Get attempt details
+(define-read-only (get-attempt (attempt-id uint))
+    (map-get? quiz-attempts attempt-id)
+)
+
+;; Get user attempts for a quiz
+(define-read-only (get-user-attempts (user principal) (quiz-id uint))
+    (default-to (list) (map-get? user-attempts { user: user, quiz-id: quiz-id }))
+)
+
+;; Get creator statistics
+(define-read-only (get-creator-stats (creator principal))
+    (default-to { quizzes-created: u0, total-rewards-given: u0 } 
+        (map-get? creator-stats creator))
+)
+
+;; Get participant statistics
+(define-read-only (get-participant-stats (participant principal))
+    (default-to { quizzes-attempted: u0, quizzes-passed: u0, total-score: u0, total-rewards-earned: u0 }
+        (map-get? participant-stats participant))
+)
+
+;; Get reward pool balance
+(define-read-only (get-reward-pool)
+    (ok (var-get reward-pool))
+)
+
+;; Get total quiz count
+(define-read-only (get-quiz-count)
+    (ok (var-get quiz-nonce))
+)
+
+;; Get total participants
+(define-read-only (get-total-participants)
+    (ok (var-get total-participants))
+)
+
+;; Calculate pass percentage
+(define-read-only (calculate-percentage (score uint) (max-score uint))
+    (if (> max-score u0)
+        (ok (/ (* score u100) max-score))
+        (ok u0)
+    )
+)
+
+;; Get platform fee percentage
+(define-read-only (get-platform-fee)
+    (ok (var-get platform-fee-percentage))
+)
+
+;; Get minimum passing score
+(define-read-only (get-minimum-passing-score)
+    (ok (var-get minimum-passing-score))
+)
+
+;; Get leaderboard entry
+(define-read-only (get-leaderboard-entry (quiz-id uint) (rank uint))
+    (map-get? quiz-leaderboard { quiz-id: quiz-id, rank: rank })
+)
+
+;; Get category statistics
+(define-read-only (get-category-stats (category (string-ascii 50)))
+    (default-to { quiz-count: u0, total-attempts: u0 }
+        (map-get? category-stats category))
+)
+
+;; Check if quiz is active
+(define-read-only (is-quiz-active (quiz-id uint))
+    (match (map-get? quizzes quiz-id)
+        quiz (ok (get active quiz))
+        err-not-found
+    )
+)
+
+;; Get quiz creator
+(define-read-only (get-quiz-creator (quiz-id uint))
+    (match (map-get? quizzes quiz-id)
+        quiz (ok (get creator quiz))
+        err-not-found
+    )
+)
+
+;; Calculate reward after platform fee
+(define-read-only (calculate-net-reward (gross-reward uint))
+    (let
+        (
+            (fee-amount (/ (* gross-reward (var-get platform-fee-percentage)) u100))
+            (net-reward (- gross-reward fee-amount))
+        )
+        (ok { gross: gross-reward, fee: fee-amount, net: net-reward })
+    )
+)
+
+;; Get user's pass rate
+(define-read-only (get-user-pass-rate (user principal))
+    (let
+        (
+            (stats (default-to { quizzes-attempted: u0, quizzes-passed: u0, total-score: u0, total-rewards-earned: u0 }
+                (map-get? participant-stats user)))
+            (attempted (get quizzes-attempted stats))
+            (passed (get quizzes-passed stats))
+        )
+        (if (> attempted u0)
+            (ok (/ (* passed u100) attempted))
+            (ok u0)
+        )
+    )
+)
+
+;; Get quiz difficulty multiplier
+(define-read-only (get-difficulty-multiplier (difficulty (string-ascii 20)))
+    (if (is-eq difficulty "easy")
+        (ok u1)
+        (if (is-eq difficulty "medium")
+            (ok u2)
+            (if (is-eq difficulty "hard")
+                (ok u3)
+                (ok u1)
+            )
+        )
+    )
+)
+
+;; Check if attempt was rewarded
+(define-read-only (is-attempt-rewarded (attempt-id uint))
+    (match (map-get? quiz-attempts attempt-id)
+        attempt (ok (get rewarded attempt))
+        err-not-found
+    )
+)
+
+;; Get total attempts count
+(define-read-only (get-total-attempts)
+    (ok (var-get attempt-nonce))
+)
+
+;; Verify quiz ownership
+(define-read-only (is-quiz-owner (quiz-id uint) (user principal))
+    (match (map-get? quizzes quiz-id)
+        quiz (ok (is-eq (get creator quiz) user))
+        err-not-found
+    )
+)
+
+;; Get quiz reward amount
+(define-read-only (get-quiz-reward (quiz-id uint))
+    (match (map-get? quizzes quiz-id)
+        quiz (ok (get reward-amount quiz))
+        err-not-found
+    )
+)
+
+;; Calculate bonus reward based on performance
+(define-read-only (calculate-bonus-reward (score uint) (max-score uint) (base-reward uint))
+    (let
+        (
+            (percentage (if (> max-score u0) (/ (* score u100) max-score) u0))
+            (bonus-multiplier (if (>= percentage u95)
+                u150
+                (if (>= percentage u85)
+                    u125
+                    u100
+                )
+            ))
+            (final-reward (/ (* base-reward bonus-multiplier) u100))
+        )
+        (ok final-reward)
+    )
+)
+
+;; Get contract owner
+(define-read-only (get-contract-owner)
+    (ok contract-owner)
+)
+
+;; Validate quiz parameters
+(define-read-only (validate-quiz-params (question-count uint) (reward-amount uint))
+    (ok (and 
+        (> question-count u0)
+        (<= question-count u100)
+        (> reward-amount u0)
+    ))
+)
+
+;; Get user's total earnings
+(define-read-only (get-user-total-earnings (user principal))
+    (let
+        (
+            (stats (default-to { quizzes-attempted: u0, quizzes-passed: u0, total-score: u0, total-rewards-earned: u0 }
+                (map-get? participant-stats user)))
+        )
+        (ok (get total-rewards-earned stats))
+    )
+)
+
+;; Get user's average score
+(define-read-only (get-user-average-score (user principal))
+    (let
+        (
+            (stats (default-to { quizzes-attempted: u0, quizzes-passed: u0, total-score: u0, total-rewards-earned: u0 }
+                (map-get? participant-stats user)))
+            (attempted (get quizzes-attempted stats))
+            (total-score (get total-score stats))
+        )
+        (if (> attempted u0)
+            (ok (/ total-score attempted))
+            (ok u0)
+        )
+    )
+)
